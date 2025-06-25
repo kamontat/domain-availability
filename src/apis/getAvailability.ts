@@ -34,7 +34,7 @@ export const getAvailability = toStepCallback(async (_: number, url: URL, header
   }
 }, {
   getName: (i: number) => `getAvailability(${i})`,
-  getSettings: () => ({ retry: 8 }),
+  getSettings: () => ({ retry: 20 }),
   getStartMsg: (_, url) => `Fetching... domains=[${url.searchParams.getAll("domain_name[]")}]`,
   needRetry: (result, error) => {
     if (error !== undefined)
