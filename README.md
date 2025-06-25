@@ -1,15 +1,11 @@
-# check-domains
+# Domain Availability
 
-To install dependencies:
+Check if domain is available or not.
 
-```bash
-bun install
-```
+## Get start
 
-To run:
+- You can get list of domains from `res/input.yaml` file
+- You can get list of output available domains from `res/output-*.txt` file
+- To execute the command: `bun start`
+- To execute adhoc domains: `bun start kamontat domain name`
 
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.2.17. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
