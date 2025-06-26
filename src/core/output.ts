@@ -9,15 +9,16 @@ export const openOutputFile = toActionCallback(async (path: string) => {
   if (await file.exists()) await file.delete()
   return {
     status: DataStatus.SUCCESS,
-    value: file.writer()
+    value: file
   } as DataOutput
 }, {
   getName: () => "openOutputFile",
   getSettings: () => ({ retry: 0 }),
 })
 
-export const writeOutputFile = toActionCallback(async (writer: Bun.FileSink, response: DataResponseValue) => {
-  response.forEach(r => {
+export const writeOutputFile = toActionCallback(async (file: Bun.BunFile, response: DataResponseValue) => {
+  const writer = file.writer({ highWaterMark: 128 })
+  response.forEach(async r => {
     writer.write(r)
     writer.write('\n')
   })
@@ -30,5 +31,6 @@ export const writeOutputFile = toActionCallback(async (writer: Bun.FileSink, res
 }, {
   getName: () => "writeOutputFile",
   getSettings: () => ({ retry: 0 }),
+  getStartMsg: (r) => `Writing... ${r.name ?? 'unknown'}`,
   getStopMsg: (r) => `Written ${r} bytes to output`
 })
