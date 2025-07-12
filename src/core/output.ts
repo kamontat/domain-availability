@@ -17,10 +17,10 @@ export const openOutputFile = toActionCallback(async (path: string) => {
   getSettings: () => ({ retry: 0 }),
 })
 
-export const writeOutputFile = toActionCallback(async (file: Bun.BunFile, response: DataResponseValue) => {
+export const writeOutputFile = toActionCallback(async (file: Bun.BunFile, response: DataResponseValue, limit: number) => {
   const writer = file.writer({ highWaterMark: 128 })
 
-  if (response.length > 15) {
+  if (response.length > limit) {
     response.forEach(async r => {
       writer.write(r)
       writer.write('\n')
@@ -42,6 +42,6 @@ export const writeOutputFile = toActionCallback(async (file: Bun.BunFile, respon
 }, {
   getName: () => "writeOutputFile",
   getSettings: () => ({ retry: 0 }),
-  getStartMsg: (f, r) => r.length > 15 ? `Writing... ${f.name ?? 'unknown'}` : `Writing... STDOUT`,
+  getStartMsg: (f, r, l) => r.length > l ? `Writing... ${f.name ?? 'unknown'}` : `Writing... STDOUT`,
   getStopMsg: (r) => (r ?? 0) > 0 ? `Written ${r} bytes to output` : `Finished write`
 })
