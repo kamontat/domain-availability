@@ -1,4 +1,4 @@
-import type { RdapServers } from "#apis";
+import type { RdapServers, WhoisServers } from "#apis";
 import {
 	checkDns,
 	checkPathosting,
@@ -6,7 +6,7 @@ import {
 	checkWhois,
 	findRdapServer,
 	getRdapBootstrap,
-	getWhoisServer,
+	getWhoisBootstrap,
 } from "#apis";
 import { success } from "#types/data";
 import type { DomainGroup } from "#types/domain";
@@ -30,7 +30,7 @@ type DomainCheck = (domain: string) => Promise<boolean>;
 /** Shared lookups across tlds, so each server is resolved only once */
 class Resolver {
 	private rdapServers: RdapServers | undefined;
-	private whoisServers = new Map<string, string | undefined>();
+	private whoisServers: WhoisServers = new Map();
 
 	constructor(
 		private progress: Progress,
@@ -56,7 +56,7 @@ class Resolver {
 					break;
 				}
 				case Checker.WHOIS: {
-					const server = await this.whoisServer(tld.suffix);
+					const server = this.whoisServer(tld.suffix);
 					if (server)
 						checks.push((domain) =>
 							this.progress.execStep(checkWhois, domain, server, timeout),
@@ -99,25 +99,33 @@ class Resolver {
 		return findRdapServer(this.rdapServers, suffix);
 	}
 
-	private async whoisServer(suffix: string) {
-		const tld = suffix.split(".").at(-1) as string;
-		if (!this.whoisServers.has(tld)) {
-			try {
-				this.whoisServers.set(
-					tld,
-					await this.progress.execStep(
-						getWhoisServer,
-						tld,
-						this.configs.reqTimeout,
-					),
-				);
-			} catch {
-				this.whoisServers.set(tld, undefined);
-			}
+	/** Prefetch WHOIS server of every tld that use whois checker */
+	async loadWhoisServers(tlds: Tld[]) {
+		const labels = new Set(
+			tlds
+				.filter((tld) => tld.checkers.includes(Checker.WHOIS))
+				.map((tld) => toTopLabel(tld.suffix)),
+		);
+		if (labels.size < 1) return;
+		try {
+			await this.progress.execStep(
+				getWhoisBootstrap,
+				[...labels],
+				this.configs.chunkSize,
+				this.configs.reqTimeout,
+				this.whoisServers,
+			);
+		} catch {
+			// keep partial result, unresolved tlds skip whois checker
 		}
-		return this.whoisServers.get(tld);
+	}
+
+	private whoisServer(suffix: string) {
+		return this.whoisServers.get(toTopLabel(suffix));
 	}
 }
+
+const toTopLabel = (suffix: string) => suffix.split(".").at(-1) as string;
 
 /** Try each check in order until one gives definite answer; resolved to undefined when all failed */
 const fallback = async (checks: DomainCheck[], domain: string) => {
@@ -135,6 +143,7 @@ export const checkAvailability = toActionCallback(
 	async (groups: DomainGroup[], configs: Configs, progress: Progress) => {
 		const result: CheckResult = { available: {}, failed: [] };
 		const resolver = new Resolver(progress, configs);
+		await resolver.loadWhoisServers(groups.map((group) => group.tld));
 
 		for (const { tld, names } of groups) {
 			const available: string[] = [];

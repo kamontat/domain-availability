@@ -1,6 +1,7 @@
 import { connect } from "node:net";
 
 import { toStepCallback } from "#types/progress-step";
+import { chunks } from "#utils/array";
 
 import { retryUnlessSkip, SkipError } from "./errors";
 
@@ -30,16 +31,47 @@ const query = (host: string, text: string, timeout: number) =>
 		});
 	});
 
-/** Find registry WHOIS server of top-level label from IANA; resolved to undefined when not exist */
-export const getWhoisServer = toStepCallback(
-	async (tld: string, timeout: number) => {
-		const response = await query(IANA_WHOIS, tld, timeout);
-		return response.match(/^(?:refer|whois):\s*(\S+)/im)?.[1];
+/** Map of top-level label to registry WHOIS server; undefined when IANA has no WHOIS server */
+export type WhoisServers = Map<string, string | undefined>;
+
+/**
+ * Find registry WHOIS server of each top-level label from IANA, queried in chunks.
+ * Resolved labels are stored to `servers`, so retry only re-query the failed ones.
+ */
+export const getWhoisBootstrap = toStepCallback(
+	async (
+		tlds: string[],
+		chunkSize: number,
+		timeout: number,
+		servers: WhoisServers = new Map(),
+	) => {
+		const errors: string[] = [];
+		const pending = tlds.filter((tld) => !servers.has(tld));
+		for (const batch of chunks(pending, chunkSize)) {
+			await Promise.all(
+				batch.map(async (tld) => {
+					try {
+						const response = await query(IANA_WHOIS, tld, timeout);
+						servers.set(
+							tld,
+							response.match(/^(?:refer|whois):\s*(\S+)/im)?.[1],
+						);
+					} catch (error) {
+						errors.push(`.${tld} (${(error as Error).message})`);
+					}
+				}),
+			);
+		}
+		if (errors.length > 0)
+			throw new Error(`Cannot fetch WHOIS server of ${errors.join(", ")}`);
+		return servers;
 	},
 	{
-		getName: (tld) => `whoisServer(${tld})`,
-		getStartMsg: (tld) => `Fetching... ${IANA_WHOIS} for .${tld}`,
-		getStopMsg: (r) => (r ? `Found ${r}` : "No WHOIS server"),
+		getName: () => "whoisBootstrap",
+		getStartMsg: (tlds) =>
+			`Fetching... ${IANA_WHOIS} for ${tlds.length} tld(s)`,
+		getStopMsg: (r) =>
+			`Found ${[...(r?.values() ?? [])].filter(Boolean).length} tld(s) with WHOIS server`,
 		needRetry: retryUnlessSkip,
 	},
 );
