@@ -18,9 +18,16 @@ import { toActionCallback } from "#types/progress-action";
 import type { StepOptions, StepSetting } from "#types/progress-step";
 import { chunks } from "#utils/array";
 
+export interface RegisteredDomain {
+	domain: string;
+	reason: string;
+}
+
 export interface CheckResult {
 	/** Domains that available to purchase, grouped by tld suffix */
 	available: Record<string, string[]>;
+	/** Domains that already registered with reason (checker that answered), grouped by tld suffix */
+	registered: Record<string, RegisteredDomain[]>;
 	/** Domains that cannot be checked (no supported checker or all checkers failed) */
 	failed: string[];
 }
@@ -168,6 +175,12 @@ class Resolver {
 
 const toTopLabel = (suffix: string) => suffix.split(".").at(-1) as string;
 
+/** Definite answer of domain and checker that gave it */
+interface Answer {
+	available: boolean;
+	checker: Checker;
+}
+
 /**
  * Try each check in order until one gives definite answer; resolved to undefined when all failed.
  * Print only one start and one stop log per domain.
@@ -176,7 +189,7 @@ const fallback = async (
 	progress: Progress<InputConfig>,
 	checks: DomainCheck[],
 	domain: string,
-) => {
+): Promise<Answer | undefined> => {
 	const name = `checker(${domain})`;
 	progress.startStep(
 		name,
@@ -195,7 +208,7 @@ const fallback = async (
 					? `Available (${retries} retries)${unverified}`
 					: `Registered (${checker})`,
 			});
-			return available;
+			return { available, checker };
 		} catch {
 			// fallback to next checker
 		}
@@ -212,13 +225,15 @@ export const checkAvailability = toActionCallback(
 		configs: InputConfig,
 		groups: DomainGroup[],
 	) => {
-		const result: CheckResult = { available: {}, failed: [] };
+		const result: CheckResult = { available: {}, registered: {}, failed: [] };
 		const resolver = new Resolver(progress, configs);
 		await resolver.loadWhoisServers(groups.map((group) => group.tld));
 
 		for (const { tld, names } of groups) {
 			const available: string[] = [];
+			const registered: RegisteredDomain[] = [];
 			result.available[tld.suffix] = available;
+			result.registered[tld.suffix] = registered;
 
 			const domains = names.map((name) => toDomain(name, tld));
 			const checks = await resolver.resolve(tld);
@@ -237,7 +252,8 @@ export const checkAvailability = toActionCallback(
 				answers.forEach((answer, i) => {
 					const domain = batch[i] as string;
 					if (answer === undefined) result.failed.push(domain);
-					else if (answer) available.push(domain);
+					else if (answer.available) available.push(domain);
+					else registered.push({ domain, reason: answer.checker });
 				});
 			}
 		}
