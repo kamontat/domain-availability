@@ -6,7 +6,7 @@ Check if domain is available to purchase or not.
 
 - Edit `data/input.yaml` to choose tlds and names
 - To execute the command: `bun start`
-- Available domains are printed to stdout when count <= `configs.stdoutLimit`, otherwise written to `outputs/YYYY-MM-DD/output-<tld>.txt` (one file per tld, e.g. `outputs/2026-09-15/output-in-th.txt`)
+- Available domains are printed to stdout when count <= 20, otherwise written to `outputs/YYYY-MM-DD/output-<tld>.txt` (one file per tld, e.g. `outputs/2026-09-15/output-in-th.txt`)
 
 ## Input
 
@@ -16,22 +16,22 @@ extends:
   - configs/common
   - tlds/common
 configs:
-  ## Default checkers of tld without `checkers`
-  checkers: [rdap, whois, dns]
-  chunkSize: 5
-tlds:
-  - suffix: com
-  - suffix: in.th
+  ## Checkers per tld suffix; tld without entry uses its parent suffix, then `_default`
+  checkers:
+    _default: [rdap, whois, dns]
     ## .th has no RDAP, skip it
-    checkers: [pathosting, whois, dns]
+    in.th: [pathosting, whois, dns]
+tlds:
+  - com
+  - in.th
 names:
   - example
 ```
 
 `extends` are resolved recursively in order; later files override earlier ones, and the current file overrides all of its extends.
 
-- `configs`: merged by key, newer wins
-- `tlds`: merged by `suffix`, newer wins
+- `configs.checkers`: merged by suffix, newer wins
+- `tlds`: merged without duplicates
 - `names`: merged without duplicates
 
 Every name is combined with every tld (e.g. `example.com`).
@@ -42,5 +42,5 @@ Each domain tries the tld's `checkers` in order; the first definite answer (avai
 
 - `rdap`: query RDAP server from [IANA bootstrap](https://data.iana.org/rdap/dns.json); not registered (404) means available. Works with most gTLDs and many ccTLDs.
 - `whois`: find registry server from `whois.iana.org`, then query it on port 43 and match "not found"-style text. Works with most ccTLDs (e.g. `.th`).
-- `pathosting`: [PAT hosting](https://services.pathosting.co.th) API, Thai tlds only (e.g. `in.th`, `co.th`). Not in default `checkers`; add it per tld.
+- `pathosting`: [PAT hosting](https://services.pathosting.co.th) API, Thai tlds only (e.g. `in.th`, `co.th`). Not in `_default` checkers; add it per tld in `configs.checkers`.
 - `dns`: NS lookup; NXDOMAIN means available. Unverified: a registered domain without nameservers also looks available, so keep it last.

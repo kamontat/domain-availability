@@ -10,37 +10,35 @@ export enum Checker {
 	DNS = "dns",
 }
 
-export interface Tld {
+export interface InputTld {
 	suffix: string;
 	checkers: Checker[];
 }
 
-export interface Configs {
-	/** Default checkers of tld without checkers list */
-	checkers: Checker[];
-	/** Number of items to process in each chunk */
-	chunkSize: number;
-	/** Number of request retries */
-	reqRetries: number;
-	/** Retry backoff factor for request retries */
-	reqRetryBackoff: number;
-	/** Request timeout in milliseconds */
-	reqTimeout: number;
-	/** Only output to stdout up to the specified limit */
-	stdoutLimit: number;
+/** Key used for tlds without own checkers */
+export const DEFAULT_CHECKERS_KEY = "_default";
+
+/** Map of tld suffix (or `_default`) to checkers */
+export type InputCheckerMap = Record<string, Checker[]>;
+
+export interface InputConfig {
+	/** Checkers per tld suffix, tld without entry use parent suffix then `_default` */
+	checkers: InputCheckerMap;
 }
 
 /** Data read from input yaml file (before extends resolved) */
 export interface RawInput {
 	extends?: string[];
-	configs?: Partial<Configs>;
-	tlds?: Array<{ suffix: string; checkers?: string[] }>;
+	configs?: {
+		checkers?: Record<string, unknown>;
+	};
+	tlds?: Array<string | number>;
 	names?: Array<string | number>;
 }
 
 /** Input after extends resolved */
 export interface Input {
-	configs: Configs;
-	tlds: Tld[];
+	configs: InputConfig;
+	tlds: InputTld[];
 	names: string[];
 }

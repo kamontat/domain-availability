@@ -8,14 +8,19 @@ import {
 	getRdapBootstrap,
 	getWhoisBootstrap,
 } from "#apis";
+import type { Progress } from "#core";
 import { success } from "#types/data";
 import type { DomainGroup } from "#types/domain";
 import { toDomain } from "#types/domain";
-import type { Configs, Tld } from "#types/input";
+import type { InputConfig, InputTld } from "#types/input";
 import { Checker } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
 import { chunks } from "#utils/array";
-import type { Progress } from "./progress";
+
+/** Number of domains checked concurrently */
+const CHUNK_SIZE = 5;
+/** Request timeout in milliseconds */
+const REQ_TIMEOUT = 5000;
 
 export interface CheckResult {
 	/** Domains that available to purchase, grouped by tld suffix */
@@ -32,14 +37,11 @@ class Resolver {
 	private rdapServers: RdapServers | undefined;
 	private whoisServers: WhoisServers = new Map();
 
-	constructor(
-		private progress: Progress,
-		private configs: Configs,
-	) {}
+	constructor(private progress: Progress<InputConfig>) {}
 
 	/** Build checks of tld in configured order, dropping checkers that not support the tld */
-	async resolve(tld: Tld) {
-		const timeout = this.configs.reqTimeout;
+	async resolve(tld: InputTld) {
+		const timeout = REQ_TIMEOUT;
 		const checks: DomainCheck[] = [];
 		for (const checker of tld.checkers) {
 			switch (checker) {
@@ -91,7 +93,7 @@ class Resolver {
 		try {
 			this.rdapServers ??= await this.progress.execStep(
 				getRdapBootstrap,
-				this.configs.reqTimeout,
+				REQ_TIMEOUT,
 			);
 		} catch {
 			return undefined;
@@ -100,7 +102,7 @@ class Resolver {
 	}
 
 	/** Prefetch WHOIS server of every tld that use whois checker */
-	async loadWhoisServers(tlds: Tld[]) {
+	async loadWhoisServers(tlds: InputTld[]) {
 		const labels = new Set(
 			tlds
 				.filter((tld) => tld.checkers.includes(Checker.WHOIS))
@@ -111,8 +113,8 @@ class Resolver {
 			await this.progress.execStep(
 				getWhoisBootstrap,
 				[...labels],
-				this.configs.chunkSize,
-				this.configs.reqTimeout,
+				CHUNK_SIZE,
+				REQ_TIMEOUT,
 				this.whoisServers,
 			);
 		} catch {
@@ -140,9 +142,13 @@ const fallback = async (checks: DomainCheck[], domain: string) => {
 };
 
 export const checkAvailability = toActionCallback(
-	async (groups: DomainGroup[], configs: Configs, progress: Progress) => {
+	async (
+		progress: Progress<InputConfig>,
+		_configs: InputConfig,
+		groups: DomainGroup[],
+	) => {
 		const result: CheckResult = { available: {}, failed: [] };
-		const resolver = new Resolver(progress, configs);
+		const resolver = new Resolver(progress);
 		await resolver.loadWhoisServers(groups.map((group) => group.tld));
 
 		for (const { tld, names } of groups) {
@@ -159,7 +165,7 @@ export const checkAvailability = toActionCallback(
 				continue;
 			}
 
-			for (const batch of chunks(domains, configs.chunkSize)) {
+			for (const batch of chunks(domains, CHUNK_SIZE)) {
 				const answers = await Promise.all(
 					batch.map((domain) => fallback(checks, domain)),
 				);

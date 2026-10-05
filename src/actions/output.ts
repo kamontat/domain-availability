@@ -1,8 +1,13 @@
 import { join } from "node:path";
-
+import type { Progress } from "#core";
 import { success, warn } from "#types/data";
+import type { InputConfig } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
 import { print } from "#utils/console";
+import type { CheckResult } from "./check";
+
+/** Print to stdout instead of files when total domains is up to this limit */
+const STDOUT_LIMIT = 20;
 
 /** Format date as YYYY-MM-DD in local timezone */
 const toDateString = (date: Date) => {
@@ -19,7 +24,12 @@ const toOutputPath = (dir: string, date: Date, suffix: string) =>
 	join(dir, toDateString(date), `output-${suffix.replaceAll(".", "-")}.txt`);
 
 export const writeOutput = toActionCallback(
-	async (available: Record<string, string[]>, dir: string, limit: number) => {
+	async (
+		_progress: Progress<InputConfig>,
+		_configs: InputConfig,
+		{ available }: CheckResult,
+		dir: string,
+	) => {
 		const total = countDomains(available);
 		if (total < 1) return warn(new Error("No available domains to output"));
 
@@ -27,7 +37,7 @@ export const writeOutput = toActionCallback(
 			.filter(([, domains]) => domains.length > 0)
 			.map(([suffix, domains]) => [suffix, [...domains].sort()] as const);
 
-		if (total <= limit) {
+		if (total <= STDOUT_LIMIT) {
 			print("\n%s\n\n", entries.flatMap(([, domains]) => domains).join("\n"));
 			return success(["STDOUT"]);
 		}
@@ -43,10 +53,8 @@ export const writeOutput = toActionCallback(
 	},
 	{
 		getName: () => "writeOutput",
-		getStartMsg: (available, _, limit) => {
-			const total = countDomains(available);
-			return `Writing... ${total} domain(s) to ${total <= limit ? "STDOUT" : "file"}`;
-		},
+		getStartMsg: ({ available }) =>
+			`Writing... ${countDomains(available)} domain(s)`,
 		getStopMsg: (r) => `Written to ${r?.join(", ")}`,
 	},
 );

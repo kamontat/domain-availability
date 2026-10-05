@@ -1,12 +1,17 @@
-import { success, warn } from "#types/data";
+import type { Progress } from "#core";
+import { success } from "#types/data";
 import type { DomainGroup } from "#types/domain";
-import type { Input } from "#types/input";
+import type { Input, InputConfig } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
 
 export const buildDomains = toActionCallback(
-	async (input: Input) => {
-		if (input.tlds.length < 1) return warn(new Error("No tlds were found"));
-		if (input.names.length < 1) return warn(new Error("No names were found"));
+	async (
+		_progress: Progress<InputConfig>,
+		_configs: InputConfig,
+		input: Input,
+	) => {
+		if (input.tlds.length < 1) throw new Error("No tlds were found");
+		if (input.names.length < 1) throw new Error("No names were found");
 		return success<DomainGroup[]>(
 			input.tlds.map((tld) => ({ tld, names: input.names })),
 		);

@@ -1,31 +1,28 @@
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
+import type { Progress } from "#core";
 import { success } from "#types/data";
-import type { Configs, Input, RawInput, Tld } from "#types/input";
-import { Checker } from "#types/input";
+import type {
+	Input,
+	InputCheckerMap,
+	InputConfig,
+	InputTld,
+	RawInput,
+} from "#types/input";
+import { Checker, DEFAULT_CHECKERS_KEY } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
 import { toStepCallback } from "#types/progress-step";
-import type { Progress } from "./progress";
 
-export const DEFAULT_CONFIGS: Configs = {
-	checkers: [Checker.RDAP, Checker.WHOIS, Checker.DNS],
-	chunkSize: 5,
-	reqRetries: 3,
-	reqRetryBackoff: 1.5,
-	reqTimeout: 5000,
-	stdoutLimit: 20,
+export const DEFAULT_INPUT_CONFIG: InputConfig = {
+	checkers: {
+		[DEFAULT_CHECKERS_KEY]: [Checker.RDAP],
+	},
 };
-
-/** Tld before default checkers applied */
-interface PartialTld {
-	suffix: string;
-	checkers?: Checker[];
-}
 
 /** Partially merged input, configs are not filled with defaults yet */
 interface MergedInput {
-	configs: Partial<Configs>;
-	tlds: PartialTld[];
+	configs: Partial<InputConfig>;
+	tlds: string[];
 	names: string[];
 }
 
@@ -68,51 +65,79 @@ const normalizeCheckers = (location: string, checkers: unknown): Checker[] => {
 	return [...new Set(checkers)] as Checker[];
 };
 
+const normalizeSuffix = (path: string, tld: unknown) => {
+	const suffix = (
+		typeof tld === "string" || typeof tld === "number" ? String(tld) : ""
+	)
+		.trim()
+		.toLowerCase()
+		.replace(/^\./, "");
+	if (suffix.length < 1)
+		throw new Error(`Invalid tld suffix in ${path}: ${JSON.stringify(tld)}`);
+	return suffix;
+};
+
 const normalizeConfigs = (
 	path: string,
 	configs: RawInput["configs"],
-): Partial<Configs> => {
-	if (configs?.checkers === undefined) return configs ?? {};
-	return {
-		...configs,
-		checkers: normalizeCheckers(`configs in ${path}`, configs.checkers),
-	};
+): Partial<InputConfig> => {
+	const { checkers, ...rest } = configs ?? {};
+	if (checkers === undefined) return rest;
+	if (typeof checkers !== "object" || Array.isArray(checkers))
+		throw new Error(
+			`Checkers of configs in ${path} must be map of tld suffix (or '${DEFAULT_CHECKERS_KEY}') to checkers`,
+		);
+	const map: InputCheckerMap = {};
+	for (const [key, value] of Object.entries(checkers)) {
+		const suffix =
+			key === DEFAULT_CHECKERS_KEY ? key : normalizeSuffix(path, key);
+		map[suffix] = normalizeCheckers(`'${suffix}' in ${path}`, value);
+	}
+	return { ...rest, checkers: map };
 };
 
-const normalizeTlds = (path: string, tlds: RawInput["tlds"]): PartialTld[] => {
-	return (tlds ?? []).map((tld) => {
-		const suffix = String(tld?.suffix ?? "")
-			.trim()
-			.toLowerCase()
-			.replace(/^\./, "");
-		if (suffix.length < 1)
-			throw new Error(`Invalid tld suffix in ${path}: ${JSON.stringify(tld)}`);
-		if (tld.checkers === undefined) return { suffix };
-		return {
-			suffix,
-			checkers: normalizeCheckers(`'${suffix}' in ${path}`, tld.checkers),
-		};
-	});
-};
+const normalizeTlds = (path: string, tlds: RawInput["tlds"]) =>
+	(tlds ?? []).map((tld) => normalizeSuffix(path, tld));
 
 const normalizeNames = (names: RawInput["names"]) =>
 	(names ?? [])
 		.map((name) => String(name).trim().toLowerCase())
 		.filter((name) => name.length > 0);
 
-/** Newer input replace older configs, tlds (by suffix) and names are merged without duplicates */
+/** Find checkers of suffix (e.g. 'co.th' will fallback to 'th', then default) */
+const findCheckers = (checkers: InputCheckerMap, suffix: string) => {
+	const labels = suffix.split(".");
+	for (let i = 0; i < labels.length; i++) {
+		const found = checkers[labels.slice(i).join(".")];
+		if (found) return found;
+	}
+	return checkers[DEFAULT_CHECKERS_KEY] ?? [];
+};
+
+/** Newer input replace older configs (checkers by suffix), tlds and names are merged without duplicates */
 const merge = (older: MergedInput, newer: MergedInput): MergedInput => {
-	const tlds = new Map(older.tlds.map((tld) => [tld.suffix, tld]));
-	for (const tld of newer.tlds) tlds.set(tld.suffix, tld);
+	const checkers =
+		older.configs.checkers || newer.configs.checkers
+			? { ...older.configs.checkers, ...newer.configs.checkers }
+			: undefined;
 	return {
-		configs: { ...older.configs, ...newer.configs },
-		tlds: [...tlds.values()],
+		configs: {
+			...older.configs,
+			...newer.configs,
+			...(checkers && { checkers }),
+		},
+		tlds: [...new Set([...older.tlds, ...newer.tlds])],
 		names: [...new Set([...older.names, ...newer.names])],
 	};
 };
 
 export const loadInput = toActionCallback(
-	async (dir: string, entry: string, progress: Progress) => {
+	async (
+		progress: Progress<InputConfig>,
+		_configs: InputConfig,
+		file: string,
+	) => {
+		const dir = dirname(file);
 		const cache = new Map<string, MergedInput>();
 		const resolve = async (
 			path: string,
@@ -140,14 +165,21 @@ export const loadInput = toActionCallback(
 			return result;
 		};
 
-		const merged = await resolve(toPath(dir, entry), []);
-		const configs: Configs = { ...DEFAULT_CONFIGS, ...merged.configs };
+		const merged = await resolve(toPath(dir, basename(file)), []);
+		const configs: InputConfig = {
+			...DEFAULT_INPUT_CONFIG,
+			...merged.configs,
+			checkers: {
+				...DEFAULT_INPUT_CONFIG.checkers,
+				...merged.configs.checkers,
+			},
+		};
 		return success<Input>({
 			configs,
 			tlds: merged.tlds.map(
-				(tld): Tld => ({
-					suffix: tld.suffix,
-					checkers: tld.checkers ?? configs.checkers,
+				(suffix): InputTld => ({
+					suffix,
+					checkers: findCheckers(configs.checkers, suffix),
 				}),
 			),
 			names: merged.names,
@@ -155,7 +187,7 @@ export const loadInput = toActionCallback(
 	},
 	{
 		getName: () => "loadInput",
-		getStartMsg: (dir, entry) => `Loading... ${toPath(dir, entry)}`,
+		getStartMsg: (file) => `Loading... ${file}`,
 		getStopMsg: (r) =>
 			`Resolved ${r?.tlds.length ?? 0} tld(s) and ${r?.names.length ?? 0} name(s)`,
 	},

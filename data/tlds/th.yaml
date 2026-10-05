@@ -1,5 +1,3 @@
 tlds:
-  - suffix: in.th
-    checkers: [pathosting]
-  - suffix: co.th
-    checkers: [pathosting]
+  - in.th
+  - co.th

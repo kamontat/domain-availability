@@ -29,51 +29,43 @@ interface Result {
 	error?: Error | undefined;
 }
 
-export interface ProgressSettings {
-	/** Default step retry count */
-	retry: number;
-	/** Exponential backoff factor between retries */
-	backoff: number;
-}
-
+/** Default step retry count */
+const RETRY = 3;
+/** Exponential backoff factor between retries */
+const BACKOFF_FACTOR = 1.5;
 const BACKOFF_BASE_MS = 200;
 const BACKOFF_MAX_MS = 10_000;
 
-export class Progress {
+export class Progress<C> {
 	private startTime: Date;
 	private currentAction: Action | undefined;
 	private actions: Map<string, Action>;
 	private steps: Map<string, Step>;
-	private settings: ProgressSettings;
+	private context: C;
 
-	constructor(settings: ProgressSettings = { retry: 0, backoff: 1.5 }) {
+	constructor(context: C) {
 		this.startTime = timeNow();
 		this.actions = new Map();
 		this.steps = new Map();
-		this.settings = settings;
+		this.context = context;
 	}
 
-	configure(settings: Partial<ProgressSettings>) {
-		this.settings = { ...this.settings, ...settings };
+	/** Replace context passed to following actions */
+	setContext(context: C) {
+		this.context = context;
 	}
 
 	async execAction<ARGS extends unknown[], D extends Data<unknown>>(
-		callback: ActionCallback<ARGS, D>,
+		callback: ActionCallback<C, ARGS, D>,
 		...args: ARGS
-	): Promise<DataValue<D> | undefined> {
+	): Promise<DataValue<D>> {
 		const name = callback.getName(...args);
 		const retry = callback.getSettings?.().retry ?? 0;
-		if (callback.needSkip?.(...args)) {
-			this.newAction({ name });
-			this.skipAction(name);
-			return undefined;
-		}
-
 		this.startAction(name, callback.getStartMsg?.(...args));
 		let lastError: Error | undefined;
 		for (let count = 0; count < retry + 1; count++) {
 			try {
-				const result = await callback(...args);
+				const result = await callback(this, this.context, ...args);
 				switch (result.status) {
 					case DataStatus.SUCCESS:
 						this.stopAction(name, {
@@ -88,7 +80,7 @@ export class Progress {
 							continue;
 						}
 						this.stopAction(name, { warn: result.warn });
-						return undefined;
+						return undefined as DataValue<D>;
 
 					case DataStatus.ERROR:
 						if (callback.needRetry?.(result, undefined)) {
@@ -97,7 +89,7 @@ export class Progress {
 							continue;
 						}
 						this.stopAction(name, { error: result.error });
-						return undefined;
+						return undefined as DataValue<D>;
 
 					default:
 						throw new Error(
@@ -128,7 +120,7 @@ export class Progress {
 		...args: ARGS
 	) {
 		const name = callback.getName(...args);
-		const retry = callback.getSettings?.().retry ?? this.settings.retry;
+		const retry = callback.getSettings?.().retry ?? RETRY;
 		this.startStep(name, callback.getStartMsg?.(...args));
 		let lastError: Error | undefined;
 		for (let count = 0; count < retry + 1; count++) {
@@ -188,12 +180,6 @@ export class Progress {
 			retry,
 		);
 		await Bun.sleep(sleep);
-	}
-
-	skipAction(name: string) {
-		const action = this.getAction({ name });
-		action.diff = timeDiff(action.startTime);
-		print("!!! %s | Skipped\n", action.color(action.name));
 	}
 
 	stopAction(name: string, result?: Result) {
@@ -305,7 +291,7 @@ export class Progress {
 
 	private backOffTime(count: number) {
 		return Math.min(
-			Math.ceil(BACKOFF_BASE_MS * this.settings.backoff ** count),
+			Math.ceil(BACKOFF_BASE_MS * BACKOFF_FACTOR ** count),
 			BACKOFF_MAX_MS,
 		);
 	}

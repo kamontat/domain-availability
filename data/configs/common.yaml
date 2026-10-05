@@ -1,13 +1,9 @@
 configs:
-  ## Number of items to process in each chunk
-  chunkSize: 5
-  ## Number of request retries
-  reqRetries: 3
-  ## Retry backoff factor for request retries
-  reqRetryBackoff: 1.5
-  ## Request timeout in milliseconds
-  reqTimeout: 5000
-  ## Only output to stdout up to the specified limit
-  stdoutLimit: 20
+  checkers:
+    _default: [rdap]
 
-  checkers: [rdap, whois, dns]
+    co: [whois]
+    io: [whois]
+    me: [whois]
+    in.th: [pathosting]
+    co.th: [pathosting]

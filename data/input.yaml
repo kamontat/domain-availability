@@ -1,5 +1,7 @@
 extends:
   - configs/common
   - tlds/common
+tlds: []
 names:
   - kc
+  - nt

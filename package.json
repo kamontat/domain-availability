@@ -24,6 +24,7 @@
 	},
 	"imports": {
 		"#core": "./src/core/index.ts",
+		"#actions": "./src/actions/index.ts",
 		"#apis": "./src/apis/index.ts",
 		"#types/*": "./src/types/*.ts",
 		"#utils/*": "./src/utils/*/index.ts"

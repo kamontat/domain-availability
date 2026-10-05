@@ -1,45 +1,23 @@
 import {
 	buildDomains,
 	checkAvailability,
+	DEFAULT_INPUT_CONFIG,
 	loadInput,
-	Progress,
 	writeOutput,
-} from "#core";
+} from "#actions";
+import { Progress } from "#core";
+import type { InputConfig } from "#types/input";
 
-const DATA_DIR = "data";
-const INPUT_FILE = "input";
+const INPUT_FILE = "data/input.yaml";
 const OUTPUT_DIR = "outputs";
 
-const progress = new Progress();
+const progress = new Progress<InputConfig>(DEFAULT_INPUT_CONFIG);
 
-const input = await progress.execAction(
-	loadInput,
-	DATA_DIR,
-	INPUT_FILE,
-	progress,
-);
-if (!input) throw new Error(`Cannot load input from ${DATA_DIR}/${INPUT_FILE}`);
-
-progress.configure({
-	retry: input.configs.reqRetries,
-	backoff: input.configs.reqRetryBackoff,
-});
+const input = await progress.execAction(loadInput, INPUT_FILE);
+progress.setContext(input.configs);
 
 const groups = await progress.execAction(buildDomains, input);
-if (groups) {
-	const result = await progress.execAction(
-		checkAvailability,
-		groups,
-		input.configs,
-		progress,
-	);
-	if (result)
-		await progress.execAction(
-			writeOutput,
-			result.available,
-			OUTPUT_DIR,
-			input.configs.stdoutLimit,
-		);
-}
+const result = await progress.execAction(checkAvailability, groups);
+await progress.execAction(writeOutput, result, OUTPUT_DIR);
 
 progress.stop();
