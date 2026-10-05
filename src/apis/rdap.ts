@@ -50,7 +50,22 @@ export const findRdapServer = (servers: RdapServers, suffix: string) => {
 	return undefined;
 };
 
-/** Check domain availability using RDAP; resolved to true when domain is not registered */
+const BLOCKED_PATTERN = /blocked|reserved|restricted|prohibited|unavailable/i;
+
+/**
+ * Some registries answer 404 for domains that cannot be registered (e.g. "google.here blocked by BSA"),
+ * so inspect error description before treating 404 as available.
+ */
+const isBlocked = async (response: Response) => {
+	try {
+		const json = (await response.json()) as { description?: string[] };
+		return json.description?.some((d) => BLOCKED_PATTERN.test(d)) ?? false;
+	} catch {
+		return false;
+	}
+};
+
+/** Check domain availability using RDAP; resolved to true when domain is not registered or blocked */
 export const checkRdap = toStepCallback(
 	async (domain: string, server: string, timeout: number) => {
 		const url = new URL(`domain/${encodeURIComponent(domain)}`, server);
@@ -58,7 +73,7 @@ export const checkRdap = toStepCallback(
 			headers: { accept: "application/rdap+json" },
 			signal: AbortSignal.timeout(timeout),
 		});
-		if (response.status === 404) return true;
+		if (response.status === 404) return !(await isBlocked(response));
 		if (response.ok) return false;
 		if (
 			response.status === 400 ||
