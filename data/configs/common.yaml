@@ -1,15 +1,15 @@
 configs:
   ## Number of domains to check in each chunk
-  checkerChunk: 10
+  checkerChunk: 5
   ## Timeout for each checker in milliseconds
   checkerTimeout: 5000
 
   ## Number of retries for each checker
   checkerRetries: 5
   ## Initial backoff time for each checker in milliseconds
-  checkerBackoffInit: 1000
+  checkerBackoffInit: 2500
   ## Backoff factor for each checker
-  checkerBackoffFactor: 1.5
+  checkerBackoffFactor: 2
 
   checkers:
     _default: [rdap]
