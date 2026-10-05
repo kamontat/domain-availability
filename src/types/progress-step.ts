@@ -1,5 +1,11 @@
 export interface StepSetting {
 	retry: number;
+	/** Backoff time before first retry in milliseconds */
+	backoffInit?: number;
+	/** Multiplier of backoff time after each retry */
+	backoffFactor?: number;
+	/** Maximum backoff time between retries in milliseconds */
+	backoffMax?: number;
 }
 
 export interface StepCallbackProperty<ARGS extends unknown[], D> {

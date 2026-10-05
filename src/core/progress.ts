@@ -2,7 +2,7 @@ import type { ChalkInstance } from "chalk";
 import type { Data, DataValue } from "#types/data";
 import { DataStatus } from "#types/data";
 import type { ActionCallback } from "#types/progress-action";
-import type { StepCallback } from "#types/progress-step";
+import type { StepCallback, StepSetting } from "#types/progress-step";
 import { errorColor, getColor, timeDiffColor, warnColor } from "#utils/color";
 import { print } from "#utils/console";
 import { timeDiff, timeNow } from "#utils/time";
@@ -119,8 +119,20 @@ export class Progress<C> {
 		callback: StepCallback<ARGS, D>,
 		...args: ARGS
 	) {
+		return this.execStepWith({}, callback, ...args);
+	}
+
+	/** Same as execStep, but settings override callback settings */
+	async execStepWith<ARGS extends unknown[], D>(
+		settings: Partial<StepSetting>,
+		callback: StepCallback<ARGS, D>,
+		...args: ARGS
+	) {
 		const name = callback.getName(...args);
-		const retry = callback.getSettings?.().retry ?? RETRY;
+		const { retry = RETRY, ...backoff } = {
+			...callback.getSettings?.(),
+			...settings,
+		};
 		this.startStep(name, callback.getStartMsg?.(...args));
 		let lastError: Error | undefined;
 		for (let count = 0; count < retry + 1; count++) {
@@ -130,7 +142,7 @@ export class Progress<C> {
 					callback.needRetry?.(result, undefined) ?? [];
 				if (needRetry) {
 					lastError = retryErr;
-					await this.retryStep(name, count, retry, retryErr);
+					await this.retryStep(name, count, retry, retryErr, backoff);
 					continue;
 				}
 
@@ -143,7 +155,7 @@ export class Progress<C> {
 					callback.needRetry?.(undefined, error as Error) ?? [];
 				if (needRetry) {
 					lastError = retryErr ?? (error as Error);
-					await this.retryStep(name, count, retry, lastError);
+					await this.retryStep(name, count, retry, lastError, backoff);
 					continue;
 				}
 
@@ -199,11 +211,17 @@ export class Progress<C> {
 		return step;
 	}
 
-	async retryStep(name: string, count: number, retry: number, error?: Error) {
+	async retryStep(
+		name: string,
+		count: number,
+		retry: number,
+		error?: Error,
+		backoff?: Omit<StepSetting, "retry">,
+	) {
 		const step = this.getStep({ name });
 		if (count >= retry) return;
 
-		const sleep = this.backOffTime(count);
+		const sleep = this.backOffTime(count, backoff);
 		const template = "      - %s | %s, retrying in %s (%d/%d)  %s\n";
 		const _name = step.color(step.name);
 		const _diff = timeDiffColor(timeDiff(step.startTime));
@@ -289,10 +307,10 @@ export class Progress<C> {
 		return found;
 	}
 
-	private backOffTime(count: number) {
-		return Math.min(
-			Math.ceil(BACKOFF_BASE_MS * BACKOFF_FACTOR ** count),
-			BACKOFF_MAX_MS,
-		);
+	private backOffTime(count: number, backoff?: Omit<StepSetting, "retry">) {
+		const base = backoff?.backoffInit ?? BACKOFF_BASE_MS;
+		const factor = backoff?.backoffFactor ?? BACKOFF_FACTOR;
+		const max = backoff?.backoffMax ?? BACKOFF_MAX_MS;
+		return Math.min(Math.ceil(base * factor ** count), max);
 	}
 }
