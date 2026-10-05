@@ -20,6 +20,7 @@ export const DEFAULT_INPUT_CONFIG: InputConfig = {
 	checkerBackoffInit: 200,
 	checkerBackoffFactor: 1.5,
 	checkerBackoffMax: 10_000,
+	outputStdoutLimit: 20,
 	checkers: {
 		[DEFAULT_CHECKERS_KEY]: [Checker.RDAP],
 	},
@@ -115,6 +116,7 @@ const normalizeConfigs = (
 		checkerBackoffInit,
 		checkerBackoffFactor,
 		checkerBackoffMax,
+		outputStdoutLimit,
 	} = configs ?? {};
 	const numbers = {
 		checkerChunk: normalizeNumber(path, "checkerChunk", checkerChunk, {
@@ -145,6 +147,12 @@ const normalizeConfigs = (
 			"checkerBackoffMax",
 			checkerBackoffMax,
 			{ min: 0 },
+		),
+		outputStdoutLimit: normalizeNumber(
+			path,
+			"outputStdoutLimit",
+			outputStdoutLimit,
+			{ min: 0, integer: true },
 		),
 	};
 	const rest = Object.fromEntries(

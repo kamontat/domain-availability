@@ -6,9 +6,6 @@ import { toActionCallback } from "#types/progress-action";
 import { print } from "#utils/console";
 import type { CheckResult } from "./check";
 
-/** Print to stdout instead of files when total domains is up to this limit */
-const STDOUT_LIMIT = 20;
-
 /** Format date as YYYY-MM-DD in local timezone */
 const toDateString = (date: Date) => {
 	const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -26,7 +23,7 @@ const toOutputPath = (dir: string, date: Date, suffix: string) =>
 export const writeOutput = toActionCallback(
 	async (
 		_progress: Progress<InputConfig>,
-		_configs: InputConfig,
+		configs: InputConfig,
 		{ available }: CheckResult,
 		dir: string,
 	) => {
@@ -37,7 +34,7 @@ export const writeOutput = toActionCallback(
 			.filter(([, domains]) => domains.length > 0)
 			.map(([suffix, domains]) => [suffix, [...domains].sort()] as const);
 
-		if (total <= STDOUT_LIMIT) {
+		if (total <= configs.outputStdoutLimit) {
 			print("\n%s\n\n", entries.flatMap(([, domains]) => domains).join("\n"));
 			return success(["STDOUT"]);
 		}

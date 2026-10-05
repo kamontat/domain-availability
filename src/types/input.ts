@@ -34,6 +34,8 @@ export interface InputConfig {
 	checkerBackoffFactor: number;
 	/** Maximum checker backoff time between retries in milliseconds */
 	checkerBackoffMax: number;
+	/** Print available domains to stdout instead of files when total is up to this limit */
+	outputStdoutLimit: number;
 	/** Checkers per tld suffix, tld without entry use parent suffix then `_default` */
 	checkers: InputCheckerMap;
 }
@@ -48,6 +50,7 @@ export interface RawInput {
 		checkerBackoffInit?: unknown;
 		checkerBackoffFactor?: unknown;
 		checkerBackoffMax?: unknown;
+		outputStdoutLimit?: unknown;
 		checkers?: Record<string, unknown>;
 	};
 	tlds?: Array<string | number>;
