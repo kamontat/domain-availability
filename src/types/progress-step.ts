@@ -8,6 +8,14 @@ export interface StepSetting {
 	backoffMax?: number;
 }
 
+/** Per-call options of step execution */
+export interface StepOptions extends Partial<StepSetting> {
+	/** Do not print start, retry and stop logs */
+	silent?: boolean;
+	/** Called before each retry */
+	onRetry?: (error: Error | undefined) => void;
+}
+
 export interface StepCallbackProperty<ARGS extends unknown[], D> {
 	getName: (...args: ARGS) => string;
 	/** Default to progress request retry configs when omitted */

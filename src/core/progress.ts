@@ -2,7 +2,11 @@ import type { ChalkInstance } from "chalk";
 import type { Data, DataValue } from "#types/data";
 import { DataStatus } from "#types/data";
 import type { ActionCallback } from "#types/progress-action";
-import type { StepCallback, StepSetting } from "#types/progress-step";
+import type {
+	StepCallback,
+	StepOptions,
+	StepSetting,
+} from "#types/progress-step";
 import { errorColor, getColor, timeDiffColor, warnColor } from "#utils/color";
 import { print } from "#utils/console";
 import { timeDiff, timeNow } from "#utils/time";
@@ -122,18 +126,28 @@ export class Progress<C> {
 		return this.execStepWith({}, callback, ...args);
 	}
 
-	/** Same as execStep, but settings override callback settings */
+	/** Same as execStep, but options override callback settings */
 	async execStepWith<ARGS extends unknown[], D>(
-		settings: Partial<StepSetting>,
+		options: StepOptions,
 		callback: StepCallback<ARGS, D>,
 		...args: ARGS
 	) {
 		const name = callback.getName(...args);
+		const { silent, onRetry, ...settings } = options;
 		const { retry = RETRY, ...backoff } = {
 			...callback.getSettings?.(),
 			...settings,
 		};
-		this.startStep(name, callback.getStartMsg?.(...args));
+		const retryStep = async (count: number, error?: Error) => {
+			if (count >= retry) return;
+			onRetry?.(error);
+			if (silent) await Bun.sleep(this.backOffTime(count, backoff));
+			else await this.retryStep(name, count, retry, error, backoff);
+		};
+		const stopStep = (result: Result) => {
+			if (!silent) this.stopStep(name, result);
+		};
+		if (!silent) this.startStep(name, callback.getStartMsg?.(...args));
 		let lastError: Error | undefined;
 		for (let count = 0; count < retry + 1; count++) {
 			try {
@@ -142,24 +156,22 @@ export class Progress<C> {
 					callback.needRetry?.(result, undefined) ?? [];
 				if (needRetry) {
 					lastError = retryErr;
-					await this.retryStep(name, count, retry, retryErr, backoff);
+					await retryStep(count, retryErr);
 					continue;
 				}
 
-				this.stopStep(name, {
-					message: callback.getStopMsg?.(result, undefined),
-				});
+				stopStep({ message: callback.getStopMsg?.(result, undefined) });
 				return result;
 			} catch (error) {
 				const [needRetry, retryErr] =
 					callback.needRetry?.(undefined, error as Error) ?? [];
 				if (needRetry) {
 					lastError = retryErr ?? (error as Error);
-					await this.retryStep(name, count, retry, lastError, backoff);
+					await retryStep(count, lastError);
 					continue;
 				}
 
-				this.stopStep(name, { error: error as Error });
+				stopStep({ error: error as Error });
 				throw error;
 			}
 		}
@@ -167,7 +179,7 @@ export class Progress<C> {
 		const error = new Error(
 			`Retry count have been exceeded ${retry}: ${lastError?.message ?? "unknown error"}`,
 		);
-		this.stopStep(name, { error });
+		stopStep({ error });
 		throw error;
 	}
 
