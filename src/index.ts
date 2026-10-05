@@ -1,19 +1,45 @@
-import { Progress } from './core/progress'
-import { readInputParam, readInputFile } from './core/input'
-import { openOutputFile, writeOutputFile } from './core/output'
-import { buildRequest } from './core/request'
-import { fetchData } from './core/fetch'
+import {
+	buildDomains,
+	checkAvailability,
+	loadInput,
+	Progress,
+	writeOutput,
+} from "#core";
 
-const CHUCK_SIZE = 5
-const OUTPUT_SIZE = 15
+const DATA_DIR = "data";
+const INPUT_FILE = "input";
+const OUTPUT_DIR = "outputs";
 
-const progress = new Progress()
+const progress = new Progress();
 
-const input = await progress.execAction(readInputParam)
-const file = (await progress.execAction(readInputFile, "res/input-all.yaml", input))!
-const output = (await progress.execAction(openOutputFile, `res/output-${Date.now()}.txt`))!
-const request = (await progress.execAction(buildRequest, input ?? file, CHUCK_SIZE))!
-const response = (await progress.execAction(fetchData, request, progress))!
-await progress.execAction(writeOutputFile, output, response, OUTPUT_SIZE)
+const input = await progress.execAction(
+	loadInput,
+	DATA_DIR,
+	INPUT_FILE,
+	progress,
+);
+if (!input) throw new Error(`Cannot load input from ${DATA_DIR}/${INPUT_FILE}`);
 
-progress.stop()
+progress.configure({
+	retry: input.configs.reqRetries,
+	backoff: input.configs.reqRetryBackoff,
+});
+
+const groups = await progress.execAction(buildDomains, input);
+if (groups) {
+	const result = await progress.execAction(
+		checkAvailability,
+		groups,
+		input.configs,
+		progress,
+	);
+	if (result)
+		await progress.execAction(
+			writeOutput,
+			result.available,
+			OUTPUT_DIR,
+			input.configs.stdoutLimit,
+		);
+}
+
+progress.stop();
