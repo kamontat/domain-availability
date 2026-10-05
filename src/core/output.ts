@@ -1,47 +1,52 @@
-import type { DataOutput } from "../models/output";
-import type { DataResponseValue } from "../models/response";
+import { join } from "node:path";
 
-import { DataStatus } from "../models/data";
-import { toActionCallback } from "../models/progress-action";
-import { print } from "../utils/console";
+import { success, warn } from "#types/data";
+import { toActionCallback } from "#types/progress-action";
+import { print } from "#utils/console";
 
-export const openOutputFile = toActionCallback(async (path: string) => {
-  const file = Bun.file(path)
-  if (await file.exists()) await file.delete()
-  return {
-    status: DataStatus.SUCCESS,
-    value: file
-  } as DataOutput
-}, {
-  getName: () => "openOutputFile",
-  getSettings: () => ({ retry: 0 }),
-})
+/** Format date as YYYY-MM-DD in local timezone */
+const toDateString = (date: Date) => {
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${date.getFullYear()}-${month}-${day}`;
+};
 
-export const writeOutputFile = toActionCallback(async (file: Bun.BunFile, response: DataResponseValue, limit: number) => {
-  const writer = file.writer({ highWaterMark: 128 })
+const countDomains = (available: Record<string, string[]>) =>
+	Object.values(available).flat().length;
 
-  if (response.length > limit) {
-    response.forEach(async r => {
-      writer.write(r)
-      writer.write('\n')
-    })
-    const bytes = await writer.end()
-    if (bytes < 1) await file.delete()
-    return {
-      status: DataStatus.SUCCESS,
-      value: bytes
-    }
-  }
+/** Output path of tld suffix (e.g. 'in.th' => '<dir>/YYYY-MM-DD/output-in-th.txt') */
+const toOutputPath = (dir: string, date: Date, suffix: string) =>
+	join(dir, toDateString(date), `output-${suffix.replaceAll(".", "-")}.txt`);
 
-  await file.delete() // DO NOT use file to output
-  print("\n%s\n\n", response.join('\n'))
-  return {
-    status: DataStatus.SUCCESS,
-    value: -1
-  }
-}, {
-  getName: () => "writeOutputFile",
-  getSettings: () => ({ retry: 0 }),
-  getStartMsg: (f, r, l) => r.length > l ? `Writing... ${f.name ?? 'unknown'}` : `Writing... STDOUT`,
-  getStopMsg: (r) => (r ?? 0) > 0 ? `Written ${r} bytes to output` : `Finished write`
-})
+export const writeOutput = toActionCallback(
+	async (available: Record<string, string[]>, dir: string, limit: number) => {
+		const total = countDomains(available);
+		if (total < 1) return warn(new Error("No available domains to output"));
+
+		const entries = Object.entries(available)
+			.filter(([, domains]) => domains.length > 0)
+			.map(([suffix, domains]) => [suffix, [...domains].sort()] as const);
+
+		if (total <= limit) {
+			print("\n%s\n\n", entries.flatMap(([, domains]) => domains).join("\n"));
+			return success(["STDOUT"]);
+		}
+
+		const now = new Date();
+		const paths: string[] = [];
+		for (const [suffix, domains] of entries) {
+			const path = toOutputPath(dir, now, suffix);
+			await Bun.write(path, `${domains.join("\n")}\n`);
+			paths.push(path);
+		}
+		return success(paths);
+	},
+	{
+		getName: () => "writeOutput",
+		getStartMsg: (available, _, limit) => {
+			const total = countDomains(available);
+			return `Writing... ${total} domain(s) to ${total <= limit ? "STDOUT" : "file"}`;
+		},
+		getStopMsg: (r) => `Written to ${r?.join(", ")}`,
+	},
+);
