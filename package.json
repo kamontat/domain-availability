@@ -1,18 +1,31 @@
 {
-  "name": "check-domains",
-  "private": true,
-  "type": "module",
-  "module": "index.ts",
-  "scripts": {
-    "start": "bun src/index.ts"
-  },
-  "dependencies": {
-    "chalk": "5.4.1",
-    "pretty-ms": "9.2.0",
-    "yaml": "2.8.0"
-  },
-  "devDependencies": {
-    "@types/bun": "1.2.17",
-    "typescript": "5.8.3"
-  }
+	"name": "check-domains",
+	"private": true,
+	"type": "module",
+	"module": "index.ts",
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"check": "bun run check:type && bun run check:biome",
+		"check:type": "tsc --noEmit",
+		"check:biome": "biome check",
+		"format": "biome check --write --unsafe"
+	},
+	"dependencies": {
+		"chalk": "5.4.1",
+		"pretty-ms": "9.2.0",
+		"yaml": "2.8.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.15",
+		"@kcconfigs/biome": "2.0.6",
+		"@kcconfigs/tsconfig": "1.1.8",
+		"@types/bun": "1.2.17",
+		"typescript": "5.8.3"
+	},
+	"imports": {
+		"#core": "./src/core/index.ts",
+		"#apis": "./src/apis/index.ts",
+		"#types/*": "./src/types/*.ts",
+		"#utils/*": "./src/utils/*/index.ts"
+	}
 }
