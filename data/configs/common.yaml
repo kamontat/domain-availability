@@ -12,7 +12,7 @@ configs:
   checkerBackoffFactor: 2
 
   checkers:
-    _default: [rdap]
+    _default: [rdap, whois, dns]
 
     co: [whois]
     io: [whois]
