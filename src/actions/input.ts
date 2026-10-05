@@ -14,6 +14,12 @@ import { toActionCallback } from "#types/progress-action";
 import { toStepCallback } from "#types/progress-step";
 
 export const DEFAULT_INPUT_CONFIG: InputConfig = {
+	checkerChunk: 5,
+	checkerTimeout: 5000,
+	checkerRetries: 3,
+	checkerBackoffInit: 200,
+	checkerBackoffFactor: 1.5,
+	checkerBackoffMax: 10_000,
 	checkers: {
 		[DEFAULT_CHECKERS_KEY]: [Checker.RDAP],
 	},
@@ -77,11 +83,73 @@ const normalizeSuffix = (path: string, tld: unknown) => {
 	return suffix;
 };
 
+/** Validate number config; undefined when omitted */
+const normalizeNumber = (
+	path: string,
+	key: string,
+	value: unknown,
+	{ min, integer = false }: { min: number; integer?: boolean },
+) => {
+	if (value === undefined) return undefined;
+	if (
+		typeof value !== "number" ||
+		!Number.isFinite(value) ||
+		value < min ||
+		(integer && !Number.isInteger(value))
+	)
+		throw new Error(
+			`${key} of configs in ${path} must be ${integer ? "integer" : "number"} >= ${min}, got ${JSON.stringify(value)}`,
+		);
+	return value;
+};
+
 const normalizeConfigs = (
 	path: string,
 	configs: RawInput["configs"],
 ): Partial<InputConfig> => {
-	const { checkers, ...rest } = configs ?? {};
+	const {
+		checkers,
+		checkerChunk,
+		checkerTimeout,
+		checkerRetries,
+		checkerBackoffInit,
+		checkerBackoffFactor,
+		checkerBackoffMax,
+	} = configs ?? {};
+	const numbers = {
+		checkerChunk: normalizeNumber(path, "checkerChunk", checkerChunk, {
+			min: 1,
+			integer: true,
+		}),
+		checkerTimeout: normalizeNumber(path, "checkerTimeout", checkerTimeout, {
+			min: 1,
+		}),
+		checkerRetries: normalizeNumber(path, "checkerRetries", checkerRetries, {
+			min: 0,
+			integer: true,
+		}),
+		checkerBackoffInit: normalizeNumber(
+			path,
+			"checkerBackoffInit",
+			checkerBackoffInit,
+			{ min: 0 },
+		),
+		checkerBackoffFactor: normalizeNumber(
+			path,
+			"checkerBackoffFactor",
+			checkerBackoffFactor,
+			{ min: 1 },
+		),
+		checkerBackoffMax: normalizeNumber(
+			path,
+			"checkerBackoffMax",
+			checkerBackoffMax,
+			{ min: 0 },
+		),
+	};
+	const rest = Object.fromEntries(
+		Object.entries(numbers).filter(([, value]) => value !== undefined),
+	) as Partial<InputConfig>;
 	if (checkers === undefined) return rest;
 	if (typeof checkers !== "object" || Array.isArray(checkers))
 		throw new Error(

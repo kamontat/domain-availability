@@ -15,12 +15,8 @@ import { toDomain } from "#types/domain";
 import type { InputConfig, InputTld } from "#types/input";
 import { Checker } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
+import type { StepSetting } from "#types/progress-step";
 import { chunks } from "#utils/array";
-
-/** Number of domains checked concurrently */
-const CHUNK_SIZE = 5;
-/** Request timeout in milliseconds */
-const REQ_TIMEOUT = 5000;
 
 export interface CheckResult {
 	/** Domains that available to purchase, grouped by tld suffix */
@@ -37,11 +33,25 @@ class Resolver {
 	private rdapServers: RdapServers | undefined;
 	private whoisServers: WhoisServers = new Map();
 
-	constructor(private progress: Progress<InputConfig>) {}
+	/** Retry settings of checker requests */
+	private settings: StepSetting;
+
+	constructor(
+		private progress: Progress<InputConfig>,
+		private configs: InputConfig,
+	) {
+		this.settings = {
+			retry: configs.checkerRetries,
+			backoffInit: configs.checkerBackoffInit,
+			backoffFactor: configs.checkerBackoffFactor,
+			backoffMax: configs.checkerBackoffMax,
+		};
+	}
 
 	/** Build checks of tld in configured order, dropping checkers that not support the tld */
 	async resolve(tld: InputTld) {
-		const timeout = REQ_TIMEOUT;
+		const timeout = this.configs.checkerTimeout;
+		const settings = this.settings;
 		const checks: DomainCheck[] = [];
 		for (const checker of tld.checkers) {
 			switch (checker) {
@@ -49,7 +59,13 @@ class Resolver {
 					const server = await this.rdapServer(tld.suffix);
 					if (server)
 						checks.push((domain) =>
-							this.progress.execStep(checkRdap, domain, server, timeout),
+							this.progress.execStepWith(
+								settings,
+								checkRdap,
+								domain,
+								server,
+								timeout,
+							),
 						);
 					else
 						this.progress.warn(
@@ -61,7 +77,13 @@ class Resolver {
 					const server = this.whoisServer(tld.suffix);
 					if (server)
 						checks.push((domain) =>
-							this.progress.execStep(checkWhois, domain, server, timeout),
+							this.progress.execStepWith(
+								settings,
+								checkWhois,
+								domain,
+								server,
+								timeout,
+							),
 						);
 					else
 						this.progress.warn(
@@ -71,7 +93,8 @@ class Resolver {
 				}
 				case Checker.PATHOSTING:
 					checks.push((domain) =>
-						this.progress.execStep(
+						this.progress.execStepWith(
+							settings,
 							checkPathosting,
 							domain.slice(0, -tld.suffix.length - 1),
 							tld.suffix,
@@ -81,7 +104,7 @@ class Resolver {
 					break;
 				case Checker.DNS:
 					checks.push((domain) =>
-						this.progress.execStep(checkDns, domain, timeout),
+						this.progress.execStepWith(settings, checkDns, domain, timeout),
 					);
 					break;
 			}
@@ -93,7 +116,7 @@ class Resolver {
 		try {
 			this.rdapServers ??= await this.progress.execStep(
 				getRdapBootstrap,
-				REQ_TIMEOUT,
+				this.configs.checkerTimeout,
 			);
 		} catch {
 			return undefined;
@@ -113,8 +136,8 @@ class Resolver {
 			await this.progress.execStep(
 				getWhoisBootstrap,
 				[...labels],
-				CHUNK_SIZE,
-				REQ_TIMEOUT,
+				this.configs.checkerChunk,
+				this.configs.checkerTimeout,
 				this.whoisServers,
 			);
 		} catch {
@@ -144,11 +167,11 @@ const fallback = async (checks: DomainCheck[], domain: string) => {
 export const checkAvailability = toActionCallback(
 	async (
 		progress: Progress<InputConfig>,
-		_configs: InputConfig,
+		configs: InputConfig,
 		groups: DomainGroup[],
 	) => {
 		const result: CheckResult = { available: {}, failed: [] };
-		const resolver = new Resolver(progress);
+		const resolver = new Resolver(progress, configs);
 		await resolver.loadWhoisServers(groups.map((group) => group.tld));
 
 		for (const { tld, names } of groups) {
@@ -165,7 +188,7 @@ export const checkAvailability = toActionCallback(
 				continue;
 			}
 
-			for (const batch of chunks(domains, CHUNK_SIZE)) {
+			for (const batch of chunks(domains, configs.checkerChunk)) {
 				const answers = await Promise.all(
 					batch.map((domain) => fallback(checks, domain)),
 				);

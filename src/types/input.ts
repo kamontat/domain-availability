@@ -22,6 +22,18 @@ export const DEFAULT_CHECKERS_KEY = "_default";
 export type InputCheckerMap = Record<string, Checker[]>;
 
 export interface InputConfig {
+	/** Number of domains checked concurrently */
+	checkerChunk: number;
+	/** Timeout of each checker request in milliseconds */
+	checkerTimeout: number;
+	/** Number of retries for each checker request */
+	checkerRetries: number;
+	/** Backoff time before first checker retry in milliseconds */
+	checkerBackoffInit: number;
+	/** Multiplier of checker backoff time after each retry */
+	checkerBackoffFactor: number;
+	/** Maximum checker backoff time between retries in milliseconds */
+	checkerBackoffMax: number;
 	/** Checkers per tld suffix, tld without entry use parent suffix then `_default` */
 	checkers: InputCheckerMap;
 }
@@ -30,6 +42,12 @@ export interface InputConfig {
 export interface RawInput {
 	extends?: string[];
 	configs?: {
+		checkerChunk?: unknown;
+		checkerTimeout?: unknown;
+		checkerRetries?: unknown;
+		checkerBackoffInit?: unknown;
+		checkerBackoffFactor?: unknown;
+		checkerBackoffMax?: unknown;
 		checkers?: Record<string, unknown>;
 	};
 	tlds?: Array<string | number>;

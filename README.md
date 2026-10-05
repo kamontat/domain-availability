@@ -16,6 +16,18 @@ extends:
   - configs/common
   - tlds/common
 configs:
+  ## Domains checked concurrently (default: 5)
+  checkerChunk: 5
+  ## Timeout per checker request in milliseconds (default: 5000)
+  checkerTimeout: 5000
+  ## Retries per checker request (default: 3)
+  checkerRetries: 3
+  ## Backoff before first retry in milliseconds (default: 200)
+  checkerBackoffInit: 200
+  ## Backoff multiplier after each retry (default: 1.5)
+  checkerBackoffFactor: 1.5
+  ## Maximum backoff between retries in milliseconds (default: 10000)
+  checkerBackoffMax: 10000
   ## Checkers per tld suffix; tld without entry uses its parent suffix, then `_default`
   checkers:
     _default: [rdap, whois, dns]
