@@ -1,0 +1,5 @@
+tlds:
+  - suffix: in.th
+    checkers: [pathosting]
+  - suffix: co.th
+    checkers: [pathosting]

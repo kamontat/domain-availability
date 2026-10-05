@@ -1,0 +1,5 @@
+extends:
+  - configs/common
+  - tlds/common
+names:
+  - kc

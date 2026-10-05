@@ -1,0 +1,9 @@
+tlds:
+  - suffix: com
+  - suffix: net
+  - suffix: co
+  - suffix: org
+  - suffix: xyz
+  - suffix: app
+  - suffix: io
+  - suffix: me
