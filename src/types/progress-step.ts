@@ -1,0 +1,37 @@
+export interface StepSetting {
+	retry: number;
+}
+
+export interface StepCallbackProperty<ARGS extends unknown[], D> {
+	getName: (...args: ARGS) => string;
+	/** Default to progress request retry configs when omitted */
+	getSettings?: () => StepSetting;
+
+	getStartMsg?: (...args: ARGS) => string | undefined;
+	getStopMsg?: (
+		result: D | undefined,
+		error: Error | undefined,
+	) => string | undefined;
+	needRetry?: (
+		result: D | undefined,
+		error: Error | undefined,
+	) => [boolean, Error | undefined];
+}
+
+export type StepCallbackFunction<ARGS extends unknown[], D> = (
+	...args: ARGS
+) => Promise<D>;
+
+export type StepCallback<ARGS extends unknown[], D> = StepCallbackFunction<
+	ARGS,
+	D
+> &
+	StepCallbackProperty<ARGS, D>;
+
+export const toStepCallback = <ARGS extends unknown[], D>(
+	fn: StepCallbackFunction<ARGS, D>,
+	properties: StepCallbackProperty<ARGS, D>,
+) => {
+	Object.assign(fn, properties);
+	return fn as StepCallback<ARGS, D>;
+};
