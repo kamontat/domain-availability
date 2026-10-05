@@ -15,7 +15,7 @@ import { toDomain } from "#types/domain";
 import type { InputConfig, InputTld } from "#types/input";
 import { Checker } from "#types/input";
 import { toActionCallback } from "#types/progress-action";
-import type { StepSetting } from "#types/progress-step";
+import type { StepOptions, StepSetting } from "#types/progress-step";
 import { chunks } from "#utils/array";
 
 export interface CheckResult {
@@ -26,7 +26,10 @@ export interface CheckResult {
 }
 
 /** Check single domain; resolved to true when available */
-type DomainCheck = (domain: string) => Promise<boolean>;
+interface DomainCheck {
+	checker: Checker;
+	check: (domain: string, options: StepOptions) => Promise<boolean>;
+}
 
 /** Shared lookups across tlds, so each server is resolved only once */
 class Resolver {
@@ -58,15 +61,17 @@ class Resolver {
 				case Checker.RDAP: {
 					const server = await this.rdapServer(tld.suffix);
 					if (server)
-						checks.push((domain) =>
-							this.progress.execStepWith(
-								settings,
-								checkRdap,
-								domain,
-								server,
-								timeout,
-							),
-						);
+						checks.push({
+							checker,
+							check: (domain, options) =>
+								this.progress.execStepWith(
+									{ ...settings, ...options },
+									checkRdap,
+									domain,
+									server,
+									timeout,
+								),
+						});
 					else
 						this.progress.warn(
 							`No RDAP server for .${tld.suffix}, skipped rdap checker`,
@@ -76,15 +81,17 @@ class Resolver {
 				case Checker.WHOIS: {
 					const server = this.whoisServer(tld.suffix);
 					if (server)
-						checks.push((domain) =>
-							this.progress.execStepWith(
-								settings,
-								checkWhois,
-								domain,
-								server,
-								timeout,
-							),
-						);
+						checks.push({
+							checker,
+							check: (domain, options) =>
+								this.progress.execStepWith(
+									{ ...settings, ...options },
+									checkWhois,
+									domain,
+									server,
+									timeout,
+								),
+						});
 					else
 						this.progress.warn(
 							`No WHOIS server for .${tld.suffix}, skipped whois checker`,
@@ -92,20 +99,29 @@ class Resolver {
 					break;
 				}
 				case Checker.PATHOSTING:
-					checks.push((domain) =>
-						this.progress.execStepWith(
-							settings,
-							checkPathosting,
-							domain.slice(0, -tld.suffix.length - 1),
-							tld.suffix,
-							timeout,
-						),
-					);
+					checks.push({
+						checker,
+						check: (domain, options) =>
+							this.progress.execStepWith(
+								{ ...settings, ...options },
+								checkPathosting,
+								domain.slice(0, -tld.suffix.length - 1),
+								tld.suffix,
+								timeout,
+							),
+					});
 					break;
 				case Checker.DNS:
-					checks.push((domain) =>
-						this.progress.execStepWith(settings, checkDns, domain, timeout),
-					);
+					checks.push({
+						checker,
+						check: (domain, options) =>
+							this.progress.execStepWith(
+								{ ...settings, ...options },
+								checkDns,
+								domain,
+								timeout,
+							),
+					});
 					break;
 			}
 		}
@@ -152,15 +168,41 @@ class Resolver {
 
 const toTopLabel = (suffix: string) => suffix.split(".").at(-1) as string;
 
-/** Try each check in order until one gives definite answer; resolved to undefined when all failed */
-const fallback = async (checks: DomainCheck[], domain: string) => {
-	for (const check of checks) {
+/**
+ * Try each check in order until one gives definite answer; resolved to undefined when all failed.
+ * Print only one start and one stop log per domain.
+ */
+const fallback = async (
+	progress: Progress<InputConfig>,
+	checks: DomainCheck[],
+	domain: string,
+) => {
+	const name = `checker(${domain})`;
+	progress.startStep(
+		name,
+		`Starting... [${checks.map((c) => c.checker).join(", ")}]`,
+	);
+
+	let retries = 0;
+	const options: StepOptions = { silent: true, onRetry: () => retries++ };
+	for (const { checker, check } of checks) {
 		try {
-			return await check(domain);
+			const available = await check(domain, options);
+			// NXDOMAIN does not prove domain is unregistered
+			const unverified = checker === Checker.DNS ? " [unverified]" : "";
+			progress.stopStep(name, {
+				message: available
+					? `Available (${retries} retries)${unverified}`
+					: `Registered (${checker})`,
+			});
+			return available;
 		} catch {
 			// fallback to next checker
 		}
 	}
+	progress.stopStep(name, {
+		error: new Error(`All checkers failed (${retries} retries)`),
+	});
 	return undefined;
 };
 
@@ -190,7 +232,7 @@ export const checkAvailability = toActionCallback(
 
 			for (const batch of chunks(domains, configs.checkerChunk)) {
 				const answers = await Promise.all(
-					batch.map((domain) => fallback(checks, domain)),
+					batch.map((domain) => fallback(progress, checks, domain)),
 				);
 				answers.forEach((answer, i) => {
 					const domain = batch[i] as string;
