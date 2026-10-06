@@ -6,7 +6,7 @@ Check if domain is available to purchase or not.
 
 - Edit `data/input.yaml` to choose tlds and names
 - To execute the command: `bun start`
-- Checked domains are printed to stdout when count <= `configs.outputStdoutLimit` (default 20), otherwise written per tld to `outputs/YYYY-MM-DD/available-<tld>.txt` (one domain per line) and `outputs/YYYY-MM-DD/registered-<tld>.txt` (`<domain> <checker>` per line), e.g. `outputs/2026-09-15/available-in-th.txt`
+- Checked domains are always written per tld to `outputs/YYYY-MM-DD/available-<tld>.txt` (one domain per line) and `outputs/YYYY-MM-DD/registered-<tld>.txt` (`<domain> <checker>` per line), e.g. `outputs/2026-09-15/available-in-th.txt`, and also printed to stdout when count <= `configs.outputStdoutLimit` (default 50)
 
 ## Input
 

@@ -52,15 +52,6 @@ export const writeOutput = toActionCallback(
 			],
 		] as const;
 
-		if (total <= configs.outputStdoutLimit) {
-			for (const [prefix, entries] of outputs) {
-				const lines = entries.flatMap(([, lines]) => lines);
-				if (lines.length > 0) print("\n[%s]\n%s\n", prefix, lines.join("\n"));
-			}
-			print("\n");
-			return success(["STDOUT"]);
-		}
-
 		const now = new Date();
 		const paths: string[] = [];
 		for (const [prefix, entries] of outputs) {
@@ -69,6 +60,15 @@ export const writeOutput = toActionCallback(
 				await Bun.write(path, `${lines.join("\n")}\n`);
 				paths.push(path);
 			}
+		}
+
+		if (total <= configs.outputStdoutLimit) {
+			for (const [prefix, entries] of outputs) {
+				const lines = entries.flatMap(([, lines]) => lines);
+				if (lines.length > 0) print("\n[%s]\n%s\n", prefix, lines.join("\n"));
+			}
+			print("\n");
+			paths.push("STDOUT");
 		}
 		return success(paths);
 	},
