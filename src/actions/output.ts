@@ -34,6 +34,52 @@ const toEntries = <T>(
 		.filter(([, items]) => items.length > 0)
 		.map(([suffix, items]) => [suffix, items.map(toLine).sort()] as const);
 
+type OutputPrefix = "available" | "registered";
+const OUTPUT_PREFIXES: OutputPrefix[] = ["available", "registered"];
+
+/** Domain of output line (e.g. 'a.com rdap' => 'a.com') */
+const toLineDomain = (line: string) => line.split(" ")[0] ?? line;
+
+const readLines = async (path: string) => {
+	const file = Bun.file(path);
+	if (!(await file.exists())) return [];
+	return (await file.text()).split("\n").filter((line) => line.length > 0);
+};
+
+/**
+ * Merge new lines of tld suffix into existing output files of same day;
+ * latest result of domain wins, so domain moves between available and registered.
+ * Return number of written files.
+ */
+const mergeOutput = async (
+	paths: Record<OutputPrefix, string>,
+	lines: Record<OutputPrefix, string[]>,
+) => {
+	const merged = new Map<string, [OutputPrefix, string]>();
+	for (const prefix of OUTPUT_PREFIXES) {
+		for (const line of await readLines(paths[prefix]))
+			merged.set(toLineDomain(line), [prefix, line]);
+	}
+	for (const prefix of OUTPUT_PREFIXES) {
+		for (const line of lines[prefix])
+			merged.set(toLineDomain(line), [prefix, line]);
+	}
+
+	let files = 0;
+	for (const prefix of OUTPUT_PREFIXES) {
+		const output = [...merged.values()]
+			.filter(([p]) => p === prefix)
+			.map(([, line]) => line)
+			.sort();
+		const file = Bun.file(paths[prefix]);
+		if (output.length > 0) {
+			await Bun.write(file, `${output.join("\n")}\n`);
+			files++;
+		} else if (await file.exists()) await file.delete();
+	}
+	return files;
+};
+
 export const writeOutput = toActionCallback(
 	async (
 		_progress: Progress<InputConfig>,
@@ -53,13 +99,18 @@ export const writeOutput = toActionCallback(
 		] as const;
 
 		const now = new Date();
+		const suffixes = new Set(
+			outputs.flatMap(([, entries]) => entries.map(([suffix]) => suffix)),
+		);
 		let files = 0;
-		for (const [prefix, entries] of outputs) {
-			for (const [suffix, lines] of entries) {
-				const path = toOutputPath(dir, now, prefix, suffix);
-				await Bun.write(path, `${lines.join("\n")}\n`);
-				files++;
+		for (const suffix of suffixes) {
+			const paths = {} as Record<OutputPrefix, string>;
+			const lines = {} as Record<OutputPrefix, string[]>;
+			for (const [prefix, entries] of outputs) {
+				paths[prefix] = toOutputPath(dir, now, prefix, suffix);
+				lines[prefix] = entries.find(([s]) => s === suffix)?.[1] ?? [];
 			}
+			files += await mergeOutput(paths, lines);
 		}
 
 		if (total <= configs.outputStdoutLimit) {
