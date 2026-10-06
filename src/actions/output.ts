@@ -53,12 +53,12 @@ export const writeOutput = toActionCallback(
 		] as const;
 
 		const now = new Date();
-		const paths: string[] = [];
+		let files = 0;
 		for (const [prefix, entries] of outputs) {
 			for (const [suffix, lines] of entries) {
 				const path = toOutputPath(dir, now, prefix, suffix);
 				await Bun.write(path, `${lines.join("\n")}\n`);
-				paths.push(path);
+				files++;
 			}
 		}
 
@@ -68,14 +68,13 @@ export const writeOutput = toActionCallback(
 				if (lines.length > 0) print("\n[%s]\n%s\n", prefix, lines.join("\n"));
 			}
 			print("\n");
-			paths.push("STDOUT");
 		}
-		return success(paths);
+		return success({ dir: join(dir, toDateString(now)), files });
 	},
 	{
 		getName: () => "writeOutput",
 		getStartMsg: ({ available, registered }) =>
 			`Writing... ${countDomains(available)} available and ${countDomains(registered)} registered domain(s)`,
-		getStopMsg: (r) => `Written to ${r?.join(", ")}`,
+		getStopMsg: (r) => `Written ${r?.files ?? 0} files to ${r?.dir}/*.txt`,
 	},
 );
