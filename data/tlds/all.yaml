@@ -28,7 +28,6 @@ tlds:
   - bar
   - bargains
   - basketball
-  - bayern
   - beauty
   - beer
   - best
@@ -48,7 +47,6 @@ tlds:
   - boats
   - bond
   - boo
-  - boston
   - boutique
   - br.com
   - broker
@@ -138,7 +136,6 @@ tlds:
   - cruises
   - cv
   - cx
-  - cymru
   - cyou
   - dad
   - dance
@@ -307,7 +304,6 @@ tlds:
   - kiwi.nz
   - kred
   - l.lc
-  - la
   - land
   - lat
   - lawyer
@@ -328,7 +324,6 @@ tlds:
   - loans
   - locker
   - lol
-  - london
   - lotto
   - love
   - ltd
@@ -352,7 +347,6 @@ tlds:
   - men
   - menu
   - mex.com
-  - miami
   - mn
   - mobi
   - mobile
@@ -369,7 +363,6 @@ tlds:
   - mu
   - mx
   - my
-  - nagoya
   - name
   - name.pr
   - navy
@@ -391,7 +384,6 @@ tlds:
   - nl
   - nom.ag
   - now
-  - nrw
   - nz
   - observer
   - off.ai
@@ -414,7 +406,6 @@ tlds:
   - org.sc
   - org.uk
   - org.vc
-  - osaka
   - p.lc
   - page
   - partners
@@ -476,7 +467,6 @@ tlds:
   - rugby
   - run
   - sa.com
-  - saarland
   - sale
   - salon
   - sarl
@@ -525,7 +515,6 @@ tlds:
   - surf
   - surgery
   - systems
-  - taipei
   - talk
   - tattoo
   - tax
@@ -544,7 +533,6 @@ tlds:
   - tm
   - to
   - today
-  - tokyo
   - tools
   - top
   - tours
@@ -567,7 +555,6 @@ tlds:
   - vacations
   - vana
   - vc
-  - vegas
   - ventures
   - vet
   - viajes
@@ -578,7 +565,6 @@ tlds:
   - vision
   - vodka
   - voyage
-  - wales
   - wang
   - watch
   - watches
@@ -605,7 +591,6 @@ tlds:
   - xyz
   - yachts
   - yoga
-  - yokohama
   - you
   - za.com
   - zip
@@ -616,3 +601,4 @@ tlds:
 # - eligible institution only: ac.nz, school.nz
 # - license / credential verification: law, abogado, esq, archi, organic
 # - organization / purpose verification: ngo, ong, vote, voto, music, bot, new, nexus
+# - region specific: eu, asia, africa, americas
