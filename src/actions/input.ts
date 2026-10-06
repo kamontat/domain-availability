@@ -20,7 +20,7 @@ export const DEFAULT_INPUT_CONFIG: InputConfig = {
 	checkerBackoffInit: 200,
 	checkerBackoffFactor: 1.5,
 	checkerBackoffMax: 10_000,
-	outputStdoutLimit: 20,
+	outputStdoutLimit: 50,
 	checkers: {
 		[DEFAULT_CHECKERS_KEY]: [Checker.RDAP],
 	},

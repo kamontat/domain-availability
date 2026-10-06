@@ -28,8 +28,8 @@ configs:
   checkerBackoffFactor: 1.5
   ## Maximum backoff between retries in milliseconds (default: 10000)
   checkerBackoffMax: 10000
-  ## Print available domains to stdout when total <= limit, otherwise write files; 0 always writes files (default: 20)
-  outputStdoutLimit: 20
+  ## Also print checked domains to stdout when total <= limit; files are always written; 0 disables stdout (default: 50)
+  outputStdoutLimit: 50
   ## Checkers per tld suffix; tld without entry uses its parent suffix, then `_default`
   checkers:
     _default: [rdap, whois, dns]
